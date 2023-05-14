@@ -1,0 +1,45 @@
+http:
+  middlewares:
+    ratelimit-middleware:
+      rateLimit:
+        average: 10
+        burst: 1
+    middleware&stand-room-create_apply:
+      replacePath:
+        path: "/web_room.Room/CreateApply"
+
+  # 添加路由
+  routers:
+    - routerGrpc:
+      entryPoints: ["grpc" ]
+      service: service-grpc
+      rule: PathPrefix(`/grpc/`)
+    - router0:
+      entryPoints: ["http"]
+      service: service-foo
+      middlewares:
+       - "ratelimit-middleware"
+      rule: Path(`/translate`)
+    - router&stand-room-create_apply:
+      entryPoints: ["http"]
+      service: service&stand-room-create_apply
+      middlewares:
+       - "middleware&stand-room-create_apply"
+      rule: Path(`/room/create_apply`)
+
+  # 添加服务
+  services:
+    service-grpc:
+      loadBalancer:
+        servers:
+          - { url: grpc://127.0.0.1:7301,  scheme: grpc}
+#          - { url: grpc://172.18.31.23:7301,  scheme: grpc}
+    service-foo:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:1234
+          - url: http://127.0.0.1:1235
+    service&stand-room-create_apply:
+      loadBalancer:
+        servers:
+          - url: grpc://127.0.0.1:9098

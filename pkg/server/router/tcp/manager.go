@@ -101,6 +101,7 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 		return nil, err
 	}
 
+	// 指定 router 的 httpHandler
 	router.SetHTTPHandler(handlerHTTP)
 
 	defaultTLSConf, err := m.tlsManager.Get(traefiktls.DefaultTLSStoreName, traefiktls.DefaultTLSConfigName)
@@ -204,6 +205,7 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 
 	sniCheck := snicheck.New(tlsOptionsForHost, handlerHTTPS)
 
+	// 指定 router 的 httpsHandler
 	router.SetHTTPSHandler(sniCheck, defaultTLSConf)
 
 	logger := log.FromContext(ctx)
@@ -251,6 +253,7 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 			continue
 		}
 
+		// 构造 tcp handler
 		handler, err := m.buildTCPHandler(ctxRouter, routerConfig)
 		if err != nil {
 			routerConfig.AddError(err, true)
@@ -354,6 +357,7 @@ func (m *Manager) buildTCPHandler(ctx context.Context, router *runtime.TCPRouter
 		return nil, errors.New("the service is missing on the router")
 	}
 
+	// service 部门的 handler 构造
 	sHandler, err := m.serviceManager.BuildTCP(ctx, router.Service)
 	if err != nil {
 		return nil, err

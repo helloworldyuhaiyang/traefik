@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/containous/alice"
@@ -72,6 +73,7 @@ type Manager struct {
 func (m *Manager) BuildHTTP(rootCtx context.Context, serviceName string) (http.Handler, error) {
 	ctx := log.With(rootCtx, log.Str(log.ServiceName, serviceName))
 
+	// 获取服务名
 	serviceName = provider.GetQualifiedName(ctx, serviceName)
 	ctx = provider.AddInContext(ctx, serviceName)
 
@@ -80,6 +82,7 @@ func (m *Manager) BuildHTTP(rootCtx context.Context, serviceName string) (http.H
 		return nil, fmt.Errorf("the service %q does not exist", serviceName)
 	}
 
+	// 节点数
 	value := reflect.ValueOf(*conf.Service)
 	var count int
 	for i := 0; i < value.NumField(); i++ {
@@ -248,6 +251,25 @@ func (m *Manager) getLoadBalancerServiceHandler(ctx context.Context, serviceName
 		service.PassHostHeader = &defaultPassHostHeader
 	}
 
+	chain := alice.New()
+	if m.metricsRegistry != nil && m.metricsRegistry.IsSvcEnabled() {
+		chain = chain.Append(metricsMiddle.WrapServiceHandler(ctx, m.metricsRegistry, serviceName))
+	}
+
+	alHandler := func(next http.Handler) (http.Handler, error) {
+		return accesslog.NewFieldHandler(next, accesslog.ServiceName, serviceName, accesslog.AddServiceFields), nil
+	}
+
+	chain = chain.Append(alHandler)
+
+	// exist grpc services
+	if m.hasGrpcServices(service.Servers) {
+		// add grpc handler
+		chain = chain.Append(func(next http.Handler) (http.Handler, error) {
+			return NewGrpcProxy(ctx, next), nil
+		})
+	}
+
 	if len(service.ServersTransport) > 0 {
 		service.ServersTransport = provider.GetQualifiedName(ctx, service.ServersTransport)
 	}
@@ -257,20 +279,12 @@ func (m *Manager) getLoadBalancerServiceHandler(ctx context.Context, serviceName
 		return nil, err
 	}
 
+	// 构建代理
 	fwd, err := buildProxy(service.PassHostHeader, service.ResponseForwarding, roundTripper, m.bufferPool)
 	if err != nil {
 		return nil, err
 	}
-
-	alHandler := func(next http.Handler) (http.Handler, error) {
-		return accesslog.NewFieldHandler(next, accesslog.ServiceName, serviceName, accesslog.AddServiceFields), nil
-	}
-	chain := alice.New()
-	if m.metricsRegistry != nil && m.metricsRegistry.IsSvcEnabled() {
-		chain = chain.Append(metricsMiddle.WrapServiceHandler(ctx, m.metricsRegistry, serviceName))
-	}
-
-	handler, err := chain.Append(alHandler).Then(pipelining.New(ctx, fwd, "pipelining"))
+	handler, err := chain.Then(pipelining.New(ctx, fwd, "pipelining"))
 	if err != nil {
 		return nil, err
 	}
@@ -429,6 +443,16 @@ func (m *Manager) upsertServers(ctx context.Context, lb healthcheck.BalancerHand
 		// FIXME Handle Metrics
 	}
 	return nil
+}
+
+func (m *Manager) hasGrpcServices(servers []dynamic.Server) bool {
+	for _, s := range servers {
+		if s.Scheme == "grpc" || strings.HasPrefix(s.URL, "grpc") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func convertSameSite(sameSite string) http.SameSite {

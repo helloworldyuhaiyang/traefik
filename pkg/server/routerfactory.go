@@ -29,6 +29,7 @@ type RouterFactory struct {
 
 	pluginBuilder middleware.PluginsBuilder
 
+	// http 日志,链路追踪,统计分析 middlewares
 	chainBuilder *middleware.ChainBuilder
 	tlsManager   *tls.Manager
 }
@@ -67,9 +68,10 @@ func NewRouterFactory(staticConfiguration static.Configuration, managerFactory *
 func (f *RouterFactory) CreateRouters(rtConf *runtime.Configuration) (map[string]*tcprouter.Router, map[string]udptypes.Handler) {
 	ctx := context.Background()
 
-	// HTTP
+	// HTTP server 部分的handler构造器(backend 使用的协议类型，负载均衡等)
 	serviceManager := f.managerFactory.Build(rtConf)
 
+	// 根据配置构造 http middlewares 的 builder
 	middlewaresBuilder := middleware.NewBuilder(rtConf.Middlewares, serviceManager, f.pluginBuilder)
 
 	routerManager := router.NewManager(rtConf, serviceManager, middlewaresBuilder, f.chainBuilder, f.metricsRegistry)
@@ -79,9 +81,10 @@ func (f *RouterFactory) CreateRouters(rtConf *runtime.Configuration) (map[string
 
 	serviceManager.LaunchHealthCheck()
 
-	// TCP
+	// Tcp server 部分的handler构造器(backend 使用的协议类型，负载均衡等)
 	svcTCPManager := tcp.NewManager(rtConf)
 
+	// tcp middlewares 构造
 	middlewaresTCPBuilder := tcpmiddleware.NewBuilder(rtConf.TCPMiddlewares)
 
 	rtTCPManager := tcprouter.NewManager(rtConf, svcTCPManager, middlewaresTCPBuilder, handlersNonTLS, handlersTLS, f.tlsManager)

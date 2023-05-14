@@ -111,6 +111,7 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 		ctxRouter := log.With(provider.AddInContext(ctx, routerName), log.Str(log.RouterName, routerName))
 		logger := log.FromContext(ctxRouter)
 
+		// 构建路由匹配之后的 handler
 		handler, err := m.buildRouterHandler(ctxRouter, routerName, routerConfig)
 		if err != nil {
 			routerConfig.AddError(err, true)
@@ -118,6 +119,7 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 			continue
 		}
 
+		// 通过添加 muxer handler 来做路由匹配
 		err = muxer.AddRoute(routerConfig.Rule, routerConfig.Priority, handler)
 		if err != nil {
 			routerConfig.AddError(err, true)
@@ -136,11 +138,13 @@ func (m *Manager) buildEntryPointHandler(ctx context.Context, configs map[string
 	return chain.Then(muxer)
 }
 
+// 构建相关的 handler 并增加了 记录日志相关的 handler
 func (m *Manager) buildRouterHandler(ctx context.Context, routerName string, routerConfig *runtime.RouterInfo) (http.Handler, error) {
 	if handler, ok := m.routerHandlers[routerName]; ok {
 		return handler, nil
 	}
 
+	// 构建 middleware handler + service handler
 	handler, err := m.buildHTTPHandler(ctx, routerConfig, routerName)
 	if err != nil {
 		return nil, err
@@ -170,11 +174,13 @@ func (m *Manager) buildHTTPHandler(ctx context.Context, router *runtime.RouterIn
 		return nil, errors.New("the service is missing on the router")
 	}
 
+	// 构建 server 相关的 handler(RoundRobin, FieldHandler, RevertProxy)
 	sHandler, err := m.serviceManager.BuildHTTP(ctx, router.Service)
 	if err != nil {
 		return nil, err
 	}
 
+	// 构建 middleware 相关的 handler
 	mHandler := m.middlewaresBuilder.BuildChain(ctx, router.Middlewares)
 
 	tHandler := func(next http.Handler) (http.Handler, error) {

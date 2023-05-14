@@ -34,7 +34,11 @@ import (
 
 var httpServerLogger = stdlog.New(log.WithoutContext().WriterLevel(logrus.DebugLevel), "", 0)
 
+// Forwarder 从 tcp 职责链到 http.Server
+// 实现了 tcp.Handler 可以做为 tcp 职责链的一部分
+// 实现了 net.Listener 可以传递给 http.Server
 type httpForwarder struct {
+	// 传递这个 listener 意义是啥?
 	net.Listener
 	connChan chan net.Conn
 	errChan  chan error
@@ -126,12 +130,14 @@ func (eps TCPEntryPoints) Switch(routersTCP map[string]*tcprouter.Router) {
 
 // TCPEntryPoint is the TCP server.
 type TCPEntryPoint struct {
-	listener               net.Listener
+	listener net.Listener
+	// 保存着 tcp 调用链,switcher 允许热更新
 	switcher               *tcp.HandlerSwitcher
 	transportConfiguration *static.EntryPointsTransport
 	tracker                *connectionTracker
-	httpServer             *httpServer
-	httpsServer            *httpServer
+	// 经过封装的 httpServer
+	httpServer  *httpServer
+	httpsServer *httpServer
 
 	http3Server *http3server
 }
@@ -149,11 +155,13 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 
 	reqDecorator := requestdecorator.New(hostResolverConfig)
 
+	// 使用包装之后的 listener 构建了 httpForwarder 构建了 http server
 	httpServer, err := createHTTPServer(ctx, listener, configuration, true, reqDecorator)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing http server: %w", err)
 	}
 
+	// route 使用生成的 httpServer.Forwarder 是通过原来的 listener 构建的
 	rt.SetHTTPForwarder(httpServer.Forwarder)
 
 	httpsServer, err := createHTTPServer(ctx, listener, configuration, false, reqDecorator)
@@ -168,6 +176,7 @@ func NewTCPEntryPoint(ctx context.Context, configuration *static.EntryPoint, hos
 
 	rt.SetHTTPSForwarder(httpsServer.Forwarder)
 
+	// 设置 tcp 的职责链 switch rt
 	tcpSwitcher := &tcp.HandlerSwitcher{}
 	tcpSwitcher.Switch(rt)
 
@@ -311,13 +320,17 @@ func (e *TCPEntryPoint) Shutdown(ctx context.Context) {
 
 // SwitchRouter switches the TCP router handler.
 func (e *TCPEntryPoint) SwitchRouter(rt *tcprouter.Router) {
+	// 把 httpServer 的 forwarder 传递给 router
+	// router 后续可以把请求转发到 httpServer 的 forwarder
 	rt.SetHTTPForwarder(e.httpServer.Forwarder)
 
+	// http 的 switcher 更新为route的
 	httpHandler := rt.GetHTTPHandler()
 	if httpHandler == nil {
 		httpHandler = router.BuildDefaultHTTPRouter()
 	}
 
+	// http 的 switcher 更新为route的
 	e.httpServer.Switcher.UpdateHandler(httpHandler)
 
 	rt.SetHTTPSForwarder(e.httpsServer.Forwarder)
@@ -329,6 +342,7 @@ func (e *TCPEntryPoint) SwitchRouter(rt *tcprouter.Router) {
 
 	e.httpsServer.Switcher.UpdateHandler(httpsHandler)
 
+	// TcpSwitcher 更新为新的 router
 	e.switcher.Switch(rt)
 
 	if e.http3Server != nil {
@@ -509,7 +523,10 @@ type stoppableServer interface {
 }
 
 type httpServer struct {
-	Server    stoppableServer
+	Server stoppableServer
+	// Forwarder 从 tcp 职责链到 http.Server
+	// 实现了 tcp.Handler 可以做为 tcp 职责链的一部分
+	// 实现了 net.Listener 可以传递给 http.Server
 	Forwarder *httpForwarder
 	Switcher  *middlewares.HTTPHandlerSwitcher
 }
@@ -518,7 +535,7 @@ func createHTTPServer(ctx context.Context, ln net.Listener, configuration *stati
 	if configuration.HTTP2.MaxConcurrentStreams < 0 {
 		return nil, errors.New("max concurrent streams value must be greater than or equal to zero")
 	}
-
+	// 构造了一系列的调用链
 	httpSwitcher := middlewares.NewHandlerSwitcher(router.BuildDefaultHTTPRouter())
 
 	next, err := alice.New(requestdecorator.WrapHandler(reqDecorator)).Then(httpSwitcher)
@@ -565,6 +582,7 @@ func createHTTPServer(ctx context.Context, ln net.Listener, configuration *stati
 		}
 	}
 
+	// 封装之后的 listener 可以通过向httpForwarder.errChan 向 httpServer 传递错误
 	listener := newHTTPForwarder(ln)
 	go func() {
 		err := serverHTTP.Serve(listener)

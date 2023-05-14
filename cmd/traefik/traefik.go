@@ -271,6 +271,7 @@ func setupServer(staticConfiguration *static.Configuration) (*server.Server, err
 
 	accessLog := setupAccessLog(staticConfiguration.AccessLog)
 	chainBuilder := middleware.NewChainBuilder(*staticConfiguration, metricsRegistry, accessLog)
+	// router factory 包含了 entrypoint managerFactory 和 chainBuilder
 	routerFactory := server.NewRouterFactory(*staticConfiguration, managerFactory, tlsManager, chainBuilder, pluginBuilder, metricsRegistry)
 
 	// Watcher
@@ -385,6 +386,7 @@ func switchRouter(routerFactory *server.RouterFactory, serverEntryPointsTCP serv
 	return func(conf dynamic.Configuration) {
 		rtConf := runtime.NewConfig(conf)
 
+		// 创建 Routers
 		routers, udpRouters := routerFactory.CreateRouters(rtConf)
 
 		if aviator != nil {

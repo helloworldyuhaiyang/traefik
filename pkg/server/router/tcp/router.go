@@ -28,6 +28,7 @@ type Router struct {
 
 	// Forwarder handlers.
 	// Handles all HTTP requests.
+	// Forwarder 从 tcp 职责链到 http.Server
 	httpForwarder tcp.Handler
 	// Handles (indirectly through muxerHTTPS, or directly) all HTTPS requests.
 	httpsForwarder tcp.Handler

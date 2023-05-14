@@ -1,0 +1,17 @@
+
+entryPoints:
+  http:
+    address: :8888
+  grpc:
+    address: :10000
+
+providers:
+  file:
+    filename: "/Users/yuhaiyang/open/traefik/config/dynamic-conf.yaml"
+
+log:
+  level: debug
+
+api:
+  insecure: true
+  dashboard: true

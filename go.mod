@@ -35,6 +35,7 @@ require (
 	github.com/influxdata/influxdb-client-go/v2 v2.7.0
 	github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d
 	github.com/instana/go-sensor v1.38.3
+	github.com/jhump/protoreflect v1.12.0
 	github.com/klauspost/compress v1.14.2
 	github.com/kvtools/valkeyrie v0.4.2-0.20220810161836-a9a70ee3f199
 	github.com/lucas-clemente/quic-go v0.28.1
@@ -71,7 +72,7 @@ require (
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 	golang.org/x/tools v0.1.6-0.20210726203631-07bc1bf47fb2
-	google.golang.org/grpc v1.38.0
+	google.golang.org/grpc v1.48.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.38.1
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/yaml.v3 v3.0.1
